@@ -1,0 +1,121 @@
+/******************************************************************************/
+/*                                                                            */
+/*  STANDARD CROSS REFERENCE - DATA OBJECTS (SQL)                             */
+/*                                                                            */
+/*  Copyright (C) 2006, 2021  Christopher F. Burns Sr.                        */
+/*                                                                            */
+/*  This program is free software: you can redistribute it and/or modify      */
+/*  it under the terms of the GNU General Public License as published by      */
+/*  the Free Software Foundation, either version 3 of the License, or         */
+/*  (at your option) any later version.                                       */
+/*                                                                            */
+/*  This program is distributed in the hope that it will be useful,           */
+/*  but WITHOUT ANY WARRANTY; without even the implied warranty of            */
+/*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the             */
+/*  GNU General Public License for more details.                              */
+/*                                                                            */
+/*  You should have received a copy of the GNU General Public License         */
+/*  along with this program.  If not, see <http://www.gnu.org/licenses/>.     */
+/*                                                                            */
+/******************************************************************************/
+
+
+CREATE TABLE STDXREF (
+  REFTABLE CHAR(15) CCSID 37 NOT NULL ,
+  NUMARG INTEGER NOT NULL ,
+  CHARARG CHAR(15) CCSID 37 NOT NULL ,
+  DATEARG DATE NOT NULL ,
+  NUMRES DECIMAL(15, 5) NOT NULL ,
+  CHARRES VARCHAR(254) CCSID 37 NOT NULL ,
+  DATERES DATE NOT NULL,
+  HIDDEN CHAR(1) CCSID 37 NOT NULL ,
+  ENTITYID INTEGER GENERATED ALWAYS AS IDENTITY (
+  START WITH 1 INCREMENT BY 1
+  NO MINVALUE NO MAXVALUE
+  NO CYCLE NO ORDER
+  NO CACHE )
+  )
+
+  RCDFMT STDXREF    ;
+
+ALTER TABLE STDXREF
+  ADD PRIMARY KEY (ENTITYID);
+
+ALTER TABLE STDXREF
+ ADD CONSTRAINT STDXREF_REFTABLE_00001
+ UNIQUE( REFTABLE , NUMARG , CHARARG , DATEARG ) ;
+
+LABEL ON TABLE STDXREF
+  IS 'Standard Cross Reference' ;
+
+LABEL ON COLUMN STDXREF
+( REFTABLE IS 'Reference           Table               Name' ,
+  NUMARG IS 'Numeric             Argument' ,
+  CHARARG IS 'Character           Argument' ,
+  DATEARG IS 'Date                Argument' ,
+  NUMRES IS 'Numeric             Result' ,
+  CHARRES IS 'Character           Result' ,
+  DATERES IS 'Date                Result' ,
+  HIDDEN IS 'Hidden              From                Search' ,
+  ENTITYID IS 'Unique              ID' ) ;
+
+LABEL ON COLUMN STDXREF
+( REFTABLE TEXT IS 'Reference Table Name' ,
+  NUMARG TEXT IS 'Numeric Argument' ,
+  CHARARG TEXT IS 'Character Argument' ,
+  DATEARG TEXT IS 'Date Argument' ,
+  NUMRES TEXT IS 'Numeric Result' ,
+  CHARRES TEXT IS 'Character Result' ,
+  DATERES TEXT IS 'Date Result' ,
+  HIDDEN TEXT IS 'Hidden From Search' ,
+  ENTITYID TEXT IS 'Unique ID' ) ;
+
+
+CREATE UNIQUE INDEX STDXREFL1
+  ON STDXREF ( REFTABLE ASC , NUMARG ASC , CHARARG ASC, DATEARG ASC )
+  ;
+
+LABEL ON INDEX STDXREFL1
+  IS 'Standard Cross Reference' ;
+
+
+CREATE INDEX STDXREFL2
+  ON STDXREF ( REFTABLE ASC , CHARARG ASC , NUMARG ASC, DATEARG ASC )
+  ;
+
+LABEL ON INDEX STDXREFL2
+  IS 'Standard Cross Reference' ;
+
+
+CREATE INDEX STDXREFL3
+  ON STDXREF ( REFTABLE ASC , NUMRES ASC , CHARRES ASC, DATERES ASC )
+  ;
+
+LABEL ON INDEX STDXREFL3
+  IS 'Standard Cross Reference' ;
+
+
+CREATE INDEX STDXREFL4
+  ON STDXREF ( REFTABLE ASC , CHARRES ASC , NUMRES ASC, DATERES ASC )
+  ;
+
+LABEL ON INDEX STDXREFL4
+  IS 'Standard Cross Reference' ;
+
+
+CREATE INDEX STDXREFL5
+  ON STDXREF ( REFTABLE ASC , DATEARG ASC )
+  ;
+
+LABEL ON INDEX STDXREFL5
+  IS 'Standard Cross Reference' ;
+
+
+CREATE INDEX STDXREFL6
+  ON STDXREF ( REFTABLE ASC , DATERES ASC)
+  ;
+
+LABEL ON INDEX STDXREFL6
+  IS 'Standard Cross Reference' ;
+
+

@@ -1,0 +1,45 @@
+/******************************************************************************/
+/*                                                                            */
+/*  STANDARD CROSS REFERENCE - VERSIONING                                     */
+/*                                                                            */
+/*  Copyright (C) 2021  Christopher F. Burns Sr.                              */
+/*                                                                            */
+/*  This program is free software: you can redistribute it and/or modify      */
+/*  it under the terms of the GNU General Public License as published by      */
+/*  the Free Software Foundation, either version 3 of the License, or         */
+/*  (at your option) any later version.                                       */
+/*                                                                            */
+/*  This program is distributed in the hope that it will be useful,           */
+/*  but WITHOUT ANY WARRANTY; without even the implied warranty of            */
+/*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the             */
+/*  GNU General Public License for more details.                              */
+/*                                                                            */
+/*  You should have received a copy of the GNU General Public License         */
+/*  along with this program.  If not, see <http://www.gnu.org/licenses/>.     */
+/*                                                                            */
+/******************************************************************************/
+
+ALTER TABLE STDXREF
+  ADD COLUMN USERID CHAR(18) NOT NULL DEFAULT USER;
+
+ALTER TABLE STDXREF
+  ADD COLUMN SYS_START TIMESTAMP(12) NOT NULL
+    GENERATED ALWAYS AS ROW BEGIN;
+
+ALTER TABLE STDXREF
+  ADD COLUMN SYS_END TIMESTAMP(12) NOT NULL
+    GENERATED ALWAYS AS ROW END;
+
+ALTER TABLE STDXREF
+  ADD COLUMN TS_ID TIMESTAMP(12) NOT NULL
+    GENERATED ALWAYS AS TRANSACTION START ID;
+
+ALTER TABLE STDXREF
+  ADD PERIOD SYSTEM_TIME (SYS_START, SYS_END);
+
+CREATE TABLE STDXREFH LIKE STDXREF;
+
+ALTER TABLE STDXREF
+  ADD VERSIONING USE HISTORY TABLE STDXREFH
+    ON DELETE ADD EXTRA ROW;
+

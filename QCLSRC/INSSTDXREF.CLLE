@@ -1,0 +1,428 @@
+/******************************************************************************/
+/*                                                                            */
+/*  STANDARD CROSS REFERENCE - INSTALLATION SCRIPT                            */
+/*                                                                            */
+/*  Copyright (C) 2006, 2021  Christopher F. Burns Sr.                        */
+/*                                                                            */
+/*  This program is free software: you can redistribute it and/or modify      */
+/*  it under the terms of the GNU General Public License as published by      */
+/*  the Free Software Foundation, either version 3 of the License, or         */
+/*  (at your option) any later version.                                       */
+/*                                                                            */
+/*  This program is distributed in the hope that it will be useful,           */
+/*  but WITHOUT ANY WARRANTY; without even the implied warranty of            */
+/*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the             */
+/*  GNU General Public License for more details.                              */
+/*                                                                            */
+/*  You should have received a copy of the GNU General Public License         */
+/*  along with this program.  If not, see <http://www.gnu.org/licenses/>.     */
+/*                                                                            */
+/******************************************************************************/
+
+
+/******************************************************************************/
+/*  HOUSEKEEPING                                                              */
+/******************************************************************************/
+
+             PGM        PARM(&INSLIB &OWNPRF &SUPADM)
+
+             DCLF       FILE(QADSPOBJ) OPNID(A)
+             DCLF       FILE(QAFDMBRL) OPNID(B)
+
+             DCL        VAR(&SQUOTE) TYPE(*CHAR) LEN(1) VALUE(X'7D')
+             DCL        VAR(&OSRELS) TYPE(*CHAR) LEN(9)
+             DCL        VAR(&INSLIB) TYPE(*CHAR) LEN(10)
+             DCL        VAR(&OWNPRF) TYPE(*CHAR) LEN(10)
+             DCL        VAR(&SUPADM) TYPE(*CHAR) LEN(10)
+             DCL        VAR(&CURLIB) TYPE(*CHAR) LEN(10)
+             DCL        VAR(&SRCSAV) TYPE(*CHAR) LEN(10)
+             DCL        VAR(&SRCPTH) TYPE(*CHAR) LEN(64)
+             DCL        VAR(&LIBPTH) TYPE(*CHAR) LEN(64)
+             DCL        VAR(&MBRPTH) TYPE(*CHAR) LEN(64)
+             DCL        VAR(&MSGTXT) TYPE(*CHAR) LEN(128)
+             DCL        VAR(&SQLSTM) TYPE(*CHAR) LEN(512)
+
+             RTVJOBA    CURLIB(&CURLIB)
+
+/******************************************************************************/
+/*  VERIFY OPERATING SYSTEM RELEASE.                                          */
+/******************************************************************************/
+
+             RTVOBJD    OBJ(QSYS/QWCISCFR) OBJTYPE(*PGM) +
+                          SYSLVL(&OSRELS)
+
+             IF         COND(&OSRELS *LT 'V07R02M00') THEN(DO)
+
+                        CHGVAR     VAR(&MSGTXT) VALUE('System does not meet OS +
+                          release and/or PTF requirements.')
+
+                        GOTO       CMDLBL(EXIT)
+
+                        ENDDO
+
+/******************************************************************************/
+/*  CREATE OWNER USER PROFILE IF IT DOES NOT EXIST.                           */
+/******************************************************************************/
+
+ USRPRF:     IF         COND(&OWNPRF *EQ '*CURRENT') THEN(RTVJOBA +
+                          USER(&OWNPRF))
+
+             ELSE       CMD(DO)
+
+                        CRTUSRPRF  USRPRF(&OWNPRF) PWDEXP(*YES) +
+                          STATUS(*DISABLED) USRCLS(*PGMR) +
+                          CURLIB(&INSLIB) INLPGM(*NONE) +
+                          INLMNU(*SIGNOFF) LMTCPB(*YES)
+
+                        MONMSG     MSGID(CPF0000)
+
+                        ENDDO
+
+             CHKOBJ     OBJ(&OWNPRF) OBJTYPE(*USRPRF)
+
+             MONMSG     MSGID(CPF9800) EXEC(DO)
+                        CHGVAR     VAR(&MSGTXT) VALUE('Owner user profile' +
+                          *BCAT &OWNPRF *BCAT 'could not be created.')
+                        GOTO       CMDLBL(EXIT)
+                        ENDDO
+
+/******************************************************************************/
+/*  VERIFY SUPER ADMINISTRATOR USER PROFILE.                                  */
+/******************************************************************************/
+
+             IF         COND(&SUPADM *EQ '*OWNPRF') THEN(CHGVAR +
+                          VAR(&SUPADM) VALUE(&OWNPRF))
+
+             ELSE       CMD(IF COND(&SUPADM *EQ '*CURRENT') +
+                          THEN(RTVJOBA USER(&SUPADM)))
+
+             ELSE       CMD(IF COND(&SUPADM *NE &OWNPRF) THEN(DO))
+
+             CHKOBJ     OBJ(&SUPADM) OBJTYPE(*USRPRF)
+
+             MONMSG     MSGID(CPF9800) EXEC(DO)
+                        CHGVAR     VAR(&MSGTXT) VALUE('Super administrator +
+                          user profile' *BCAT &SUPADM *BCAT 'not +
+                          found.')
+                        GOTO       CMDLBL(EXIT)
+                        ENDDO
+
+             ENDDO
+
+/******************************************************************************/
+/*  CREATE APPLICATION LIBRARY.                                               */
+/******************************************************************************/
+
+             CHGVAR     VAR(&SQLSTM) VALUE('CREATE SCHEMA' *BCAT +
+                          &INSLIB)
+
+             RUNSQL     SQL(&SQLSTM) DATFMT(*ISO)
+
+             MONMSG     MSGID(CPF2111 SQL0601) EXEC(DO)
+                        CHGVAR     VAR(&MSGTXT) VALUE('Installation library' +
+                          *BCAT &INSLIB *BCAT 'already exists.')
+                        GOTO       CMDLBL(EXIT)
+                        ENDDO
+
+             CHGOBJOWN  OBJ(&INSLIB) OBJTYPE(*LIB) NEWOWN(&OWNPRF) +
+                          CUROWNAUT(*REVOKE)
+                        MONMSG     MSGID(CPF0000)
+
+/******************************************************************************/
+/*  RESTORE SOURCE CODE AND MENU OBJECTS, BUILD DATA OBJECTS.                 */
+/******************************************************************************/
+
+             CHGCURLIB  CURLIB(&INSLIB)
+
+             ADDLIBLE   LIB(&INSLIB) POSITION(*FIRST)
+
+             RSTOBJ     OBJ(Q*) SAVLIB(STDXREFSRC) DEV(*SAVF) +
+                          OBJTYPE(*FILE) SAVF(QTEMP/STDXREFSRC) +
+                          MBROPT(*ALL) ALWOBJDIF(*ALL) RSTLIB(&INSLIB)
+                        MONMSG     MSGID(CPF0000)
+
+             MOVOBJ     OBJ(QTEMP/STDXREFS) OBJTYPE(*FILE) +
+                          TOLIB(&INSLIB)
+                        MONMSG     MSGID(CPF0000)
+
+             MOVOBJ     OBJ(QTEMP/STDXREFS) OBJTYPE(*MSGF) +
+                          TOLIB(&INSLIB)
+                        MONMSG     MSGID(CPF0000)
+
+             RUNSQLSTM  SRCFILE(&INSLIB/QTXTSRC) SRCMBR(STDXREF) +
+                          COMMIT(*NONE) NAMING(*SYS) ERRLVL(40) +
+                          DATFMT(*ISO) DFTRDBCOL(*NONE)
+                        MONMSG     MSGID(SQL0000)
+
+/******************************************************************************/
+/*  ESTABLISH VERSIONING IF O/S RELEASE SUPPORTS IT.                          */
+/******************************************************************************/
+
+             IF         COND(&OSRELS *GE 'V07R03M00') THEN(DO)
+
+             RUNSQLSTM  SRCFILE(&INSLIB/QTXTSRC) SRCMBR(STDXREFVER) +
+                          COMMIT(*NONE) NAMING(*SYS) DATFMT(*ISO) +
+                          DFTRDBCOL(*NONE)
+                        MONMSG     MSGID(SQL0000)
+
+             ENDDO
+
+/******************************************************************************/
+/*  BUILD SERVICE PROGRAM FOR STANDARD I/O FUNCTIONS.                         */
+/******************************************************************************/
+
+             CRTBNDDIR  BNDDIR(&INSLIB/STDXREF)
+                        MONMSG     MSGID(CPF0000)
+
+             CRTDSPF    FILE(&INSLIB/STDXREFIOP) +
+                          SRCFILE(&INSLIB/QDDSSRC) RSTDSP(*YES) +
+                          REPLACE(*YES)
+                        MONMSG     MSGID(CPF0000)
+
+             CRTPRTF    FILE(&INSLIB/STDXREFLST) +
+                          SRCFILE(&INSLIB/QDDSSRC) PAGESIZE(66 80) +
+                          LPI(6) CPI(10) OVRFLW(64)
+                        MONMSG     MSGID(CPF0000)
+
+             CRTSQLRPGI OBJ(&INSLIB/STDXREFIOP) +
+                          SRCFILE(&INSLIB/QRPGLESRC) COMMIT(*NONE) +
+                          OBJTYPE(*MODULE) RPGPPOPT(*LVL2) +
+                          DATFMT(*ISO) REPLACE(*YES) DBGVIEW(*SOURCE)
+                        MONMSG     MSGID(CPF0000)
+
+             CRTSRVPGM  SRVPGM(&INSLIB/STDXREFIOP) +
+                          SRCFILE(&INSLIB/QSRVSRC) BNDDIR(STDXREF) +
+                          ACTGRP(STDXREF) OPTION(*DUPPROC) +
+                          REPLACE(*YES) AUT(*ALL)
+                        MONMSG     MSGID(CPF0000)
+
+             DLTMOD     MODULE(&INSLIB/STDXREFIOP)
+                        MONMSG     MSGID(CPF0000)
+
+             ADDBNDDIRE BNDDIR(&INSLIB/STDXREF) OBJ((STDXREFIOP +
+                          *SRVPGM *IMMED))
+                        MONMSG     MSGID(CPF0000)
+
+/******************************************************************************/
+/*  BUILD SERVICE PROGRAM FOR APPLICATIN FUNCTIONS.                           */
+/******************************************************************************/
+
+             CRTSQLRPGI OBJ(&INSLIB/STDXREFFNC) +
+                          SRCFILE(&INSLIB/QRPGLESRC) COMMIT(*NONE) +
+                          OBJTYPE(*MODULE) RPGPPOPT(*LVL2) +
+                          DATFMT(*ISO) REPLACE(*YES) DBGVIEW(*SOURCE)
+                        MONMSG     MSGID(CPF0000)
+
+             CRTSRVPGM  SRVPGM(&INSLIB/STDXREFFNC) +
+                          SRCFILE(&INSLIB/QSRVSRC) BNDDIR(STDXREF) +
+                          ACTGRP(STDXREF) OPTION(*DUPPROC) +
+                          REPLACE(*YES) AUT(*ALL)
+                        MONMSG     MSGID(CPF0000)
+
+             DLTMOD     MODULE(&INSLIB/STDXREFFNC)
+                        MONMSG     MSGID(CPF0000)
+
+             ADDBNDDIRE BNDDIR(&INSLIB/STDXREF) OBJ((STDXREFFNC +
+                          *SRVPGM *IMMED))
+                        MONMSG     MSGID(CPF0000)
+
+/******************************************************************************/
+/*  BUILD SQL USER DEFINED FUNCTIONS ASSOCIATED WITH *SRVPGM PROCEDURES.      */
+/******************************************************************************/
+
+             RUNSQLSTM  SRCFILE(&INSLIB/QTXTSRC) SRCMBR(STDXREFIOP) +
+                          COMMIT(*NONE) ERRLVL(40) DATFMT(*ISO)
+                        MONMSG     MSGID(SQL0000)
+
+             RUNSQLSTM  SRCFILE(&INSLIB/QTXTSRC) SRCMBR(STDXREFFNC) +
+                          COMMIT(*NONE) ERRLVL(40) DATFMT(*ISO)
+                        MONMSG     MSGID(SQL0000)
+
+/******************************************************************************/
+/*  OTHER MISCELLANEOUS OBJECTS.                                              */
+/******************************************************************************/
+
+             CRTDSPF    FILE(&INSLIB/STDXREFMNT) +
+                          SRCFILE(&INSLIB/QDDSSRC) RSTDSP(*YES) +
+                          REPLACE(*YES)
+                        MONMSG     MSGID(CPF0000)
+
+             CRTDSPF    FILE(&INSLIB/STDXREFMN2) +
+                          SRCFILE(&INSLIB/QDDSSRC) RSTDSP(*YES) +
+                          REPLACE(*YES)
+                        MONMSG     MSGID(CPF0000)
+
+             CRTSQLRPGI OBJ(&INSLIB/STDXREFMNT) +
+                          SRCFILE(&INSLIB/QRPGLESRC) COMMIT(*NONE) +
+                          OBJTYPE(*PGM) RPGPPOPT(*LVL2) +
+                          DATFMT(*ISO) REPLACE(*YES) DBGVIEW(*SOURCE)
+                        MONMSG     MSGID(SQL0000)
+
+             CRTSQLRPGI OBJ(&INSLIB/STDXREFMN2) +
+                          SRCFILE(&INSLIB/QRPGLESRC) COMMIT(*NONE) +
+                          OBJTYPE(*PGM) RPGPPOPT(*LVL2) +
+                          DATFMT(*ISO) REPLACE(*YES) DBGVIEW(*SOURCE)
+                        MONMSG     MSGID(SQL0000)
+
+             CRTMNU     MENU(&INSLIB/STDXREFS) TYPE(*DSPF) +
+                          DSPF(&INSLIB/STDXREFS) +
+                          MSGF(&INSLIB/STDXREFS) CMDLIN(*LONG) +
+                          DSPKEY(*YES) CURLIB(*NOCHG) +
+                          PRDLIB(*NOCHG) REPLACE(*YES) +
+                          TEXT('Standard Cross Reference Main Menu')
+                        MONMSG     MSGID(CPF0000)
+
+             CRTQMQRY   QMQRY(&INSLIB/STDXREFLST) +
+                          SRCFILE(&INSLIB/QTXTSRC)
+                        MONMSG     MSGID(CPF0000)
+
+             CRTQMFORM  QMFORM(&INSLIB/STDXREFLST) +
+                          SRCFILE(&INSLIB/QQMFORMSRC)
+                        MONMSG     MSGID(CPF0000)
+
+             CRTCLMOD   MODULE(&INSLIB/STDXREFLST) +
+                          SRCFILE(&INSLIB/QCLSRC) +
+                          SRCMBR(STDXREFLST) DBGVIEW(*SOURCE)
+
+             CRTPGM     PGM(&INSLIB/STDXREFLST) +
+                          MODULE(&INSLIB/STDXREFLST) BNDDIR(STDXREF)
+
+             CRTBNDCL   PGM(&INSLIB/STDXREFMNC) +
+                          SRCFILE(&INSLIB/QCLSRC) SRCMBR(STDXREFMNC)
+                        MONMSG     MSGID(CPF0000)
+
+             CRTCMD     CMD(&INSLIB/STDXREFLST) +
+                          PGM(&INSLIB/STDXREFLST) +
+                          SRCFILE(&INSLIB/QCMDSRC) AUT(*ALL) +
+                          REPLACE(*YES)
+                        MONMSG     MSGID(CPF0000)
+
+             CRTCMD     CMD(&INSLIB/STDXREFMNT) +
+                          PGM(&INSLIB/STDXREFMNC) +
+                          SRCFILE(&INSLIB/QCMDSRC) AUT(*ALL) +
+                          REPLACE(*YES)
+                        MONMSG     MSGID(CPF0000)
+
+/******************************************************************************/
+/*  CHANGE OWNERSHIP OF ALL INSTALLED OBJECTS TO SPECIFIED USER.              */
+/******************************************************************************/
+
+             DSPOBJD    OBJ(&INSLIB/*ALL) OBJTYPE(*ALL) +
+                          OUTPUT(*OUTFILE) OUTFILE(QTEMP/QADSPOBJ) +
+                          OUTMBR(*FIRST *REPLACE)
+
+             OVRDBF     FILE(QADSPOBJ) TOFILE(QTEMP/QADSPOBJ) +
+                          OVRSCOPE(*CALLLVL)
+
+ NXTOBJ:     RCVF       RCDFMT(QLIDOBJD) OPNID(A)
+                        MONMSG     MSGID(CPF0000) EXEC(GOTO CMDLBL(ENDOBJ))
+
+             CHGOBJOWN  OBJ(&A_ODLBNM/&A_ODOBNM) OBJTYPE(&A_ODOBTP) +
+                          NEWOWN(&OWNPRF)
+
+             GRTOBJAUT  OBJ(&A_ODLBNM/&A_ODOBNM) OBJTYPE(&A_ODOBTP) +
+                          USER(*PUBLIC) AUT(*CHANGE) REPLACE(*YES)
+                        MONMSG     MSGID(CPF0000)
+
+             GOTO       CMDLBL(NXTOBJ)
+
+ ENDOBJ:
+
+/******************************************************************************/
+/*  SET SUPER ADMIN USER.                                                     */
+/******************************************************************************/
+
+             RUNSQLSTM  SRCFILE(&INSLIB/QTXTSRC) SRCMBR(STDXREFADM) +
+                          COMMIT(*NONE) NAMING(*SYS) ERRLVL(40) +
+                          DATFMT(*ISO) DFTRDBCOL(*NONE)
+
+             MONMSG     MSGID(CPF0000 SQL0000) EXEC(DO)
+                        CHGVAR     VAR(&MSGTXT) VALUE('Could not establish +
+                          SUPERADMIN reference table.')
+                        GOTO       CMDLBL(EXIT)
+                        ENDDO
+
+             CHGVAR     VAR(&SQLSTM) VALUE('UPDATE STDXREF SET +
+                          CHARARG =' *BCAT &SQUOTE *TCAT &SUPADM +
+                          *TCAT &SQUOTE *BCAT 'WHERE REFTABLE =' +
+                          *BCAT &SQUOTE *TCAT 'SUPERADMIN' *TCAT +
+                          &SQUOTE *BCAT 'AND CHARARG =' *BCAT +
+                          &SQUOTE *TCAT '??????????' *TCAT &SQUOTE)
+
+             RUNSQL     SQL(&SQLSTM) COMMIT(*NONE) DATFMT(*ISO)
+
+             MONMSG     MSGID(CPF0000 SQL0000) EXEC(DO)
+                        CHGVAR     VAR(&MSGTXT) VALUE('Could not establish +
+                          SUPERADMIN reference table.')
+                        GOTO       CMDLBL(EXIT)
+                        ENDDO
+
+
+/******************************************************************************/
+/*  COPY SOURCE TO ROOT FILE SYSTEM.                                          */
+/******************************************************************************/
+
+             CHGVAR     VAR(&SRCPTH) VALUE('/' *TCAT &INSLIB)
+
+             MKDIR      DIR(&SRCPTH) DTAAUT(*RWX) OBJAUT(*ALL)
+                        MONMSG     MSGID(CPF0000)
+
+             DSPFD      FILE(&INSLIB/Q*) TYPE(*MBRLIST) +
+                          OUTPUT(*OUTFILE) OUTFILE(QTEMP/QAFDMBRL) +
+                          OUTMBR(*FIRST *REPLACE)
+
+             OVRDBF     FILE(QAFDMBRL) TOFILE(QTEMP/QAFDMBRL)
+
+ NXTMBR:     RCVF       RCDFMT(QWHFDML) OPNID(B)
+                        MONMSG     MSGID(CPF0000) EXEC(GOTO CMDLBL(ENDMBR))
+
+             IF         COND(&B_MLFILE *NE &SRCSAV) THEN(DO)
+
+                        CHGVAR     VAR(&SRCPTH) VALUE('/' *TCAT &INSLIB *TCAT +
+                                     '/' *TCAT &B_MLFILE)
+
+                        MKDIR      DIR(&SRCPTH) DTAAUT(*RWX) OBJAUT(*ALL)
+                                   MONMSG     MSGID(CPF0000)
+
+                        CHGVAR     VAR(&SRCSAV) VALUE(&B_MLFILE)
+
+                        ENDDO
+
+             CHGVAR     VAR(&LIBPTH) VALUE('/QSYS.LIB/' *TCAT &B_MLLIB +
+                          *TCAT '.LIB/' *TCAT &B_MLFILE *TCAT +
+                          '.FILE/' *TCAT &B_MLNAME *TCAT '.MBR')
+
+             CHGVAR     VAR(&MBRPTH) VALUE(&SRCPTH *TCAT '/' *TCAT +
+                          &B_MLNAME *TCAT '.' *TCAT &B_MLSEU2)
+
+             CPYTOSTMF  FROMMBR(&LIBPTH) TOSTMF(&MBRPTH) +
+                          STMFOPT(*REPLACE) STMFCODPAG(*PCASCII)
+                        MONMSG     MSGID(CPF0000)
+
+
+             GOTO       CMDLBL(NXTMBR)
+
+ ENDMBR:
+
+/******************************************************************************/
+/*  SET CURRENT LIBRARY BACK TO ORIGINAL VALUE.                               */
+/******************************************************************************/
+
+             CHGCURLIB  CURLIB(&CURLIB)
+                        MONMSG     MSGID(CPF0000) EXEC(CHGCURLIB +
+                          CURLIB(*CRTDFT))
+
+             RMVLIBLE   LIB(&INSLIB)
+                        MONMSG     MSGID(CPF0000)
+
+             CHGVAR     VAR(&MSGTXT) VALUE('STDXREF successfully +
+                          installed to library' *BCAT &INSLIB *TCAT +
+                          '.')
+
+             COMMIT
+                        MONMSG     MSGID(CPF0000)
+
+ EXIT:       SNDPGMMSG  MSG(&MSGTXT)
+
+             ENDPGM
+

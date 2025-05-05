@@ -1,0 +1,53 @@
+/******************************************************************************/
+/*                                                                            */
+/*  STANDARD CROSS REFERENCE LISTING                                          */
+/*                                                                            */
+/*  Copyright (C) 2006, 2021  Christopher F. Burns Sr.                        */
+/*                                                                            */
+/*  This program is free software: you can redistribute it and/or modify      */
+/*  it under the terms of the GNU General Public License as published by      */
+/*  the Free Software Foundation, either version 3 of the License, or         */
+/*  (at your option) any later version.                                       */
+/*                                                                            */
+/*  This program is distributed in the hope that it will be useful,           */
+/*  but WITHOUT ANY WARRANTY; without even the implied warranty of            */
+/*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the             */
+/*  GNU General Public License for more details.                              */
+/*                                                                            */
+/*  You should have received a copy of the GNU General Public License         */
+/*  along with this program.  If not, see <http://www.gnu.org/licenses/>.     */
+/*                                                                            */
+/******************************************************************************/
+
+             PGM        PARM(&REFTABLE &VERSION)
+
+             DCL        VAR(&REFTABLE) TYPE(*CHAR) LEN(15)
+             DCL        VAR(&VERSION)  TYPE(*CHAR) LEN(10)
+             DCL        VAR(&TBLQUOTE) TYPE(*CHAR) LEN(12)
+             DCL        VAR(&SNGQUOTE) TYPE(*CHAR) LEN(1) VALUE(X'7D')
+
+             IF         COND(&REFTABLE *EQ ' ') THEN(CHGVAR +
+                          VAR(&REFTABLE) VALUE('*ALL'))
+
+             IF         COND(&VERSION *EQ '*CURRENT') THEN(DO)
+
+                        CALLPRC    PRC(PRINTXREFTABLE) PARM((&REFTABLE *BYVAL))
+
+                        ENDDO
+
+             ELSE       CMD(DO)
+
+                        CHGVAR     VAR(&TBLQUOTE) VALUE(&SNGQUOTE *TCAT +
+                                     &REFTABLE *TCAT &SNGQUOTE)
+
+                        OVRPRTF    FILE(QPQXPRTF) PAGESIZE(66 152) LPI(6) +
+                                     CPI(15) OVRFLW(63) OVRSCOPE(*CALLLVL)
+
+                        STRQMQRY   QMQRY(STDXREFLST) OUTPUT(*PRINT) +
+                                     QMFORM(*QMQRY) DATETIME(*NO) PAGNBR(*NO) +
+                                     SETVAR((REFTABLE &TBLQUOTE))
+
+                        ENDDO
+
+             ENDPGM
+

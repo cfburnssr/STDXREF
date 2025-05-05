@@ -1,0 +1,48 @@
+/******************************************************************************/
+/*                                                                            */
+/*  STANDARD CROSS REFERENCE I/O PROCEDURES                                   */
+/*                                                                            */
+/*  Copyright (C) 2006, 2021  Christopher F. Burns Sr.                        */
+/*                                                                            */
+/*  This program is free software: you can redistribute it and/or modify      */
+/*  it under the terms of the GNU General Public License as published by      */
+/*  the Free Software Foundation, either version 3 of the License, or         */
+/*  (at your option) any later version.                                       */
+/*                                                                            */
+/*  This program is distributed in the hope that it will be useful,           */
+/*  but WITHOUT ANY WARRANTY; without even the implied warranty of            */
+/*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the             */
+/*  GNU General Public License for more details.                              */
+/*                                                                            */
+/*  You should have received a copy of the GNU General Public License         */
+/*  along with this program.  If not, see <http://www.gnu.org/licenses/>.     */
+/*                                                                            */
+/******************************************************************************/
+
+             STRPGMEXP  SIGNATURE('STDXREFIOP')
+             EXPORT     SYMBOL(FINDXREFNUM)
+             EXPORT     SYMBOL(FINDXREFCHAR)
+             EXPORT     SYMBOL(OKTODELETE)
+             EXPORT     SYMBOL(VALIDXREF)
+             EXPORT     SYMBOL(VALIDXREFN)
+             EXPORT     SYMBOL(VALIDXREFC)
+             EXPORT     SYMBOL(VALIDXREFD)
+             EXPORT     SYMBOL(VALIDXREFNC)
+             EXPORT     SYMBOL(VALIDXREFND)
+             EXPORT     SYMBOL(VALIDXREFCD)
+             EXPORT     SYMBOL(PUTXREFTABLE)
+             EXPORT     SYMBOL(PUTXREFENTRY)
+             EXPORT     SYMBOL(FINDXREFARG)
+             EXPORT     SYMBOL(FINDXREFARGN)
+             EXPORT     SYMBOL(FINDXREFARGC)
+             EXPORT     SYMBOL(FINDXREFARGD)
+             EXPORT     SYMBOL(PRINTXREFTABLE)
+             EXPORT     SYMBOL(USERNUMBER)
+             EXPORT     SYMBOL(ISSUPERADMIN)
+             EXPORT     SYMBOL(ISTABLEADMIN)
+             EXPORT     SYMBOL(GETTABLEID)
+             EXPORT     SYMBOL(NUMBEROFENTRIES)
+             EXPORT     SYMBOL(ISNUMERICARG)
+             EXPORT     SYMBOL(ISDATEARG)
+             ENDPGMEXP
+

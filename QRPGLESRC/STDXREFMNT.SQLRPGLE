@@ -1,0 +1,611 @@
+      **********************************************************************************************
+      *                                                                                            *
+      *  STANDARD CROSS REFERENCE MAINTENANCE (LEGACY)                                             *
+      *                                                                                            *
+      *  Copyright (C) 2006, 2021  Christopher F. Burns Sr.                                        *
+      *                                                                                            *
+      *  This program is free software: you can redistribute it and/or modify                      *
+      *  it under the terms of the GNU General Public License as published by                      *
+      *  the Free Software Foundation, either version 3 of the License, or                         *
+      *  (at your option) any later version.                                                       *
+      *                                                                                            *
+      *  This program is distributed in the hope that it will be useful,                           *
+      *  but WITHOUT ANY WARRANTY; without even the implied warranty of                            *
+      *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the                             *
+      *  GNU General Public License for more details.                                              *
+      *                                                                                            *
+      *  You should have received a copy of the GNU General Public License                         *
+      *  along with this program.  If not, see <http://www.gnu.org/licenses/>.                     *
+      *                                                                                            *
+      **********************************************************************************************
+
+      /copy qcpysrc,stdhpgm                                                  // std control specs
+      /copy qcpysrc,stdxrefiop                                               // std xref I/O procs
+      /copy qcpysrc,stdxreffnc                                               // std xref functions
+      /copy qcpysrc,stdpgmsts                                                // std prog status DS
+
+       dcl-f stdxrefmnt workstn sfile(stdxrefs1:sflrr1)
+                                sfile(stdxrefs2:sflrr2);                     // maintenance screens
+
+       dcl-pr Listing extpgm('STDXREFLST');                                  // hardcopy listing
+         RefTable like(s1RefTbl) const;                                      // reference table
+         Version  char(10)       const;                                      // software version
+       end-pr;                                                               // hardcopy listing
+
+       dcl-pi *n;                                                            // entry parameters
+         RefTable like(s1RefTbl) options(*nopass);                           // reference table
+       end-pi;                                                               // entry parameters
+
+       dcl-ds Ind based(iptr) qualified;                                     // screen indicators
+         Exit       ind      pos(03);                                        // f3 to exit
+         Create     ind      pos(06);                                        // f6 to create
+         Guide      ind      pos(08);                                        // f8 to show guide
+         Long       ind      pos(10);                                        // f10 to use long fmt
+         Cancel     ind      pos(12);                                        // f12 to cancel
+         Print      ind      pos(21);                                        // f21 to print
+         DeleteX    ind      pos(23);                                        // f23 to delete
+         EnableSFL1 ind      pos(31);                                        // enable SFL #1
+         EnableOpt1 ind      pos(34);                                        // enable SFL #1 opts
+         EnableTabl ind      pos(36);                                        // enable table name
+         EnableDesc ind      pos(37);                                        // enable table desc
+         EnableSFL2 ind      pos(41);                                        // enable SFL #2
+         EnableOpt2 ind      pos(44);                                        // enable SFL #2 opts
+         EnableArgs ind      pos(46);                                        // enable arguments
+         EnableRslt ind      pos(47);                                        // enable results
+         DsplayNArg ind      pos(51);                                        // display num  arg
+         DsplayCArg ind      pos(52);                                        // display char arg
+         DsplayNRes ind      pos(54);                                        // display num  res
+         DsplayCRes ind      pos(55);                                        // display char res
+         TableLevel char(10) pos(60);                                        // table level attrib
+         TableExist ind      pos(67);                                        // table already exists
+         OneArgReqd ind      pos(68);                                        // min one arg required
+         NamDesReqd ind      pos(69);                                        // name & desc required
+         EntryLevel char(10) pos(70);                                        // entry level attrib
+         InvSupAdmn ind      pos(71);                                        // invalid super admin
+         InvTabName ind      pos(72);                                        // invalid table name
+         InvTabAdmn ind      pos(73);                                        // invalid table admin
+         InvCharArg ind      pos(76);                                        // invalid char argmt
+         EntryExist ind      pos(77);                                        // entry already exists
+         EntryNoDel ind      pos(96);                                        // entry del ineligible
+         TableNoDel ind      pos(97);                                        // table del ineligible
+         TableAdmin ind      pos(98);                                        // table admin user
+         SuperAdmin ind      pos(99);                                        // super admin user
+       end-ds;                                                               // screen indicators
+
+       dcl-s iptr pointer inz(%addr(*in));                                   // align with indara
+       dcl-s sflrr1 int(5);                                                  // sfl #1 record number
+       dcl-s sflrr2 int(5);                                                  // sfl #2 record number
+       dcl-s errors ind;                                                     // general errors flag
+
+       dcl-s DsplayNarg ind;                                                 // display numeric arg
+       dcl-s DsplayCarg ind;                                                 // display char arg
+       dcl-s DsplayNRes ind;                                                 // display numeric res
+       dcl-s DsplayCRes ind;                                                 // display char res
+
+      **********************************************************************************************
+
+       exec sql declare stdxrefx1 cursor for
+         select RefTable, CharRes, EntityID
+           from stdxref
+             where CharArg   = :Marker
+               and RefTable >= :c1PosnTo
+               and RefTable <> :TableGuide
+                 order by 1;                                                 // table headers sql
+
+       exec sql declare stdxrefx2 cursor for
+         select NumArg, CharArg, NumRes, CharRes, Hidden, EntityID
+           from stdxref
+             where RefTable = :c2RefTbl
+               and CharArg <> :Marker
+                 order by 1, 2;                                              // table entries sql
+
+       // if a reference table name was passed, go directly to entries
+
+       if %parms > 0 and RefTable <> '*ALL';                                 // if ref table passed
+
+         s1RefTbl = RefTable;                                                // reference table
+
+         exec sql select ifnull(CharRes, ' ') into :s1TblDes from stdxref
+           where RefTable = :RefTable
+             and NumArg   = 0
+             and CharArg  = :Marker;                                         // ref table descriptor
+
+         dou Ind.Exit or Ind.Cancel;                                         // until exit or cancel
+
+           ShowEntries();                                                    // show table entries
+
+           if Ind.Create;                                                    // if create entry
+             EditEntries();                                                  // edit window
+           elseif not Ind.Cancel;                                            // or enter pressed
+             RevwEntries();                                                  // spin through sfl
+           endif;                                                            // if create entry
+
+         enddo;                                                              // until exit or canc
+
+       // no reference table name was passed, header and entry maintenance
+
+       else;                                                                 // no ref table passed
+
+         dou Ind.Exit;                                                       // until user exits
+
+           ShowTables();                                                     // show xref tables
+
+           if Ind.Create;                                                    // if create table
+             EditTables();                                                   // edit table header
+             RevwTables();                                                   // review table
+           elseif not Ind.Exit;                                              // or update table
+             RevwTables();                                                   // review table
+           endif;                                                            // if create table
+
+         enddo;                                                              // until user exits
+
+       endif;                                                                // if ref table passed
+
+       *inlr = *on;                                                          // end of program
+
+      **********************************************************************************************
+
+       dcl-proc ShowTables;                                                  // show table headers
+
+       clear Ind.EnableSFL1;                                                 // disable sfl #1
+       clear Ind.EnableOpt1;                                                 // disable sfl #1 opts
+       clear sflrr1;                                                         // sfl record number
+       clear stdxrefs1;                                                      // clear all fields
+       write stdxrefc1;                                                      // clear subfile
+
+       c1PgmNam = pgmsts.pgmnam;                                             // program name
+       c1UsrPrf = pgmsts.usrprf;                                             // user profile
+
+       Ind.EnableSFL1 = *on;                                                 // enable sfl #1
+       Ind.SuperAdmin = isSuperAdmin();                                      // see if super admin
+
+       exec sql open stdxrefx1;                                              // open sql cursor
+       exec sql fetch from stdxrefx1
+         into :s1RefTbl, :s1TblDes, :s1EntityID;                             // fetch first header
+
+       dow sqlcod = 0;                                                       // while more headers
+
+         if Ind.SuperAdmin
+         or s1RefTbl <> SuperAdmin and s1RefTbl <> TableAdmin;               // if authorized table
+           sflrr1 += 1;                                                      // sfl record number
+           s1Entries = NumberOfEntries(s1RefTbl);                            // number of entries
+           Ind.EnableOpt1 = *on;                                             // enable sfl #1 opts
+           write stdxrefs1;                                                  // write subfile recd
+         endif;                                                              // if authorized table
+
+         exec sql fetch from stdxrefx1
+           into :s1RefTbl, :s1TblDes, :s1EntityID;                           // fetch next header
+
+       enddo;                                                                // while more headers
+
+       exec sql close stdxrefx1;                                             // close sql cursor
+
+       if sflrr1 = 0;                                                        // if subfile empty
+         sflrr1 = 2;                                                         // sfl record number
+         s1TblDes = 'NO TABLES DEFINED';                                     // no tables message
+         write stdxrefs1;                                                    // write subfile recd
+       endif;                                                                // if subfile empty
+
+       write stdxrefk1;                                                      // show function keys
+       exfmt stdxrefc1;                                                      // display subfile
+
+       end-proc;                                                             // show table headers
+
+      **********************************************************************************************
+
+       dcl-proc RevwTables;                                                  // review tables
+
+       clear sflrr1;                                                         // sfl record number
+
+       dou %eof(stdxrefmnt);                                                 // until end of sfl
+
+         readc stdxrefs1;                                                    // read next entry
+
+         if %eof(stdxrefmnt);                                                // if end of subfile
+
+           // do nothing
+
+         elseif s1Option = 'P';                                              // or print table
+
+           w3RefTbl = s1RefTbl;                                              // ref table name
+           Listing(w3RefTbl : '*LEGACY');                                    // print listing
+           exfmt stdxrefw3;                                                  // confirmation window
+
+         elseif s1Option = 'T';                                              // or edit table header
+
+           EditTables();                                                     // edit selected table
+
+         elseif s1Option = 'X';                                              // or entry selected
+
+           dou Ind.Exit or Ind.Cancel;                                       // until exit or cancel
+
+             ShowEntries();                                                  // show table entries
+
+             if Ind.Create;                                                  // if create entry
+               EditEntries();                                                // edit window
+             elseif not Ind.Cancel;                                          // or enter pressed
+               RevwEntries();                                                // spin through sfl
+             endif;                                                          // if create entry
+
+           enddo;                                                            // until exit or cancel
+         endif;                                                              // if entry selected
+       enddo;                                                                // until end of sfl
+
+       end-proc;                                                             // review tables
+
+      **********************************************************************************************
+
+       dcl-proc EditTables;                                                  // edit table headers
+
+       dcl-s TableCount int(5);                                              // table entry count
+       dcl-s LowDate    date;                                                // low date value
+
+       clear stdxrefw1;                                                      // clear all fields
+       clear errors;                                                         // clear error flag
+
+       if Ind.Create;                                                        // if creating entry
+         Ind.EnableTabl = *on;                                               // enable table name
+         Ind.EnableDesc = *on;                                               // enable description
+         w1EntityID = 0;                                                     // no entity ID
+       else;                                                                 // updating entry
+         Ind.EnableDesc = Ind.SuperAdmin;                                    // enable description
+         w1RefTbl   = s1RefTbl;                                              // character argument
+         w1TblDes   = s1TblDes;                                              // character result
+         w1EntityID = s1EntityID;                                            // entity ID
+         w1NArgText = XrefCharNC(TableGuide : w1EntityID : 'NUMARG');        // numeric arg text
+         w1CArgText = XrefCharNC(TableGuide : w1EntityID : 'CHARARG');       // character arg text
+         w1NResText = XrefCharNC(TableGuide : w1EntityID : 'NUMRES');        // numeric res text
+         w1CResText = XrefCharNC(TableGuide : w1EntityID : 'CHARRES');       // character res text
+       endif;                                                                // if creating entry
+
+       Ind.TableNoDel = (w1RefTbl = SuperAdmin or
+                         w1RefTbl = TableAdmin or
+                         w1RefTbl = TableGuide);                             // cannot delete these
+
+       dou Ind.Cancel or Ind.DeleteX or not errors;                          // until canc or no err
+
+         exfmt stdxrefw1;                                                    // maintenance window
+
+         if Ind.DeleteX and OKToDelete();                                    // if delete
+
+           if Ind.EnableTabl;                                                // if create mode
+             Ind.Cancel = *on;                                               // same as cancel
+           else;                                                             // honestly deleting
+             exec sql delete from stdxref
+               where RefTable = :w1RefTbl;                                   // delete entire table
+           endif;                                                            // if create mode
+
+         elseif Ind.Cancel;                                                  // or cancel
+
+         else;
+
+           clear TableCount;                                                 // table entry count
+
+           exec sql select count(*) into :TableCount from stdxref
+             where RefTable = :w1RefTbl
+               and NumArg   = 0
+               and CharArg  = :Marker;                                       // see if exists
+
+           Ind.NamDesReqd = (w1RefTbl = *blanks or w1TblDes = *blanks);      // name and dsc missing
+           Ind.TableExist = (Ind.EnableTabl and TableCount > 0);             // already exists
+           Ind.OneArgReqd = (w1NArgText = *blanks and w1CArgText = *blanks); // min one arg required
+
+           errors         = (Ind.TableLevel <> *zeros);                      // general errors flag
+
+           if not errors;                                                    // if no errors
+
+             if TableCount > 0;                                              // if exists
+               exec sql update stdxref
+                 set CharRes = :w1TblDes
+                   where RefTable = :w1RefTbl
+                     and NumArg   = 0
+                     and CharArg  = :Marker;                                 // see if exists
+             else;                                                           // does not exist
+               putXrefTable(w1RefTbl : w1TblDes);                            // insert new header
+             endif;                                                          // if exists
+
+             putXrefEntry(TableGuide : w1EntityID : 'NUMARG'  : LowDate :
+                          0          : w1NArgText : LowDate   : 'N');        // numeric arg guide
+
+             putXrefEntry(TableGuide : w1EntityID : 'CHARARG' : LowDate :
+                          0          : w1CArgText : LowDate   : 'N');        // character arg guide
+
+             putXrefEntry(TableGuide : w1EntityID : 'NUMRES'  : LowDate :
+                          0          : w1NResText : LowDate   : 'N');        // numeric res guide
+
+             putXrefEntry(TableGuide : w1EntityID : 'CHARRES' : LowDate :
+                          0          : w1CResText : LowDate   : 'N');        // character res guide
+
+           endif;                                                            // if no errors
+         endif;                                                              // if delete
+       enddo;                                                                // until canc or no err
+
+       clear Ind.EnableTabl;                                                 // disable table info
+
+       end-proc;                                                             // edit table headers
+
+      **********************************************************************************************
+
+       dcl-proc ShowEntries;                                                 // show table entries
+
+       DsplayNArg =
+         (XrefCharNC(TableGuide : s1EntityID : 'NUMARG')  > *blanks);        // display num arg
+
+       DsplayCArg =
+         (XrefCharNC(TableGuide : s1EntityID : 'CHARARG') > *blanks);        // display char arg
+
+       DsplayNRes =
+         (XrefCharNC(TableGuide : s1EntityID : 'NUMRES')  > *blanks);        // display num res
+
+       DsplayCRes =
+         (XrefCharNC(TableGuide : s1EntityID : 'CHARRES') > *blanks);        // display char res
+
+       clear Ind.EnableSFL2;                                                 // sfl non display
+       clear Ind.EnableOpt2;                                                 // disable sfl option
+       clear sflrr2;                                                         // sfl record number
+       clear stdxrefs2;                                                      // clear all fields
+       write stdxrefc2;                                                      // clear subfile
+
+       Ind.EnableSFL2 = *on;                                                 // sfl display mode
+       c2RefTbl = s1RefTbl;                                                  // reference table
+       c2TblDes = s1TblDes;                                                  // table description
+       c2PgmNam = pgmsts.pgmnam;                                             // program name
+       c2UsrPrf = pgmsts.usrprf;                                             // user profile
+
+       Ind.SuperAdmin = isSuperAdmin();                                      // see if super admin
+       Ind.TableAdmin = isTableAdmin(c2RefTbl);                              // see if table admin
+       Ind.TableNoDel = (c2RefTbl = SuperAdmin or
+                         c2RefTbl = TableAdmin or
+                         c2RefTbl = TableGuide);                             // cannot delete these
+
+       exec sql open stdxrefx2;                                              // open sql cursor
+       exec sql fetch from stdxrefx2
+         into :s2NumArg,  :s2CharArg, :s2NumRes,
+              :s2CharRes, :s2Hidden,  :s2EntityID;                           // fetch first entry
+
+       dow sqlcod = 0;                                                       // while more entries
+         sflrr2 += 1;                                                        // sfl record number
+
+         if DsplayNArg;                                                      // if num arg used
+           s2NumArgX = %trim(%editc(s2NumArg:'3'));                          // show numeric arg
+         else;                                                               // num arg not used
+           s2NumArgX = *blanks;                                              // show blanks instead
+         endif;                                                              // if num arg used
+
+         if DsplayCArg;                                                      // if char arg used
+           s2CharArgX = s2CharArg;                                           // show char arg
+         else;                                                               // char arg not used
+           s2CharArgX = *blanks;                                             // show blanks instead
+         endif;                                                              // if char arg used
+
+         if DsplayNRes;                                                      // if num res used
+           s2NumResX = %trim(%editc(s2NumRes:'3'));                          // show numeric res
+         else;                                                               // num res not used
+           s2NumResX = *blanks;                                              // show blanks instead
+         endif;                                                              // if num res used
+
+         if DsplayCRes;                                                      // if char res used
+           s2CharResX = s2CharRes;                                           // show char res
+         else;                                                               // char res not used
+           s2CharResX = *blanks;                                             // show blanks instead
+         endif;                                                              // if char res used
+
+         Ind.EnableOpt2 = Ind.TableAdmin;                                    // enable sfl option
+
+         write stdxrefs2;                                                    // write subfile recd
+
+         exec sql fetch from stdxrefx2
+           into :s2NumArg,  :s2CharArg, :s2NumRes,
+                :s2CharRes, :s2Hidden,  :s2EntityID;                         // fetch next entry
+       enddo;                                                                // while more entries
+
+       exec sql close stdxrefx2;                                             // close sql cursor
+
+       if sflrr2 = 0;                                                        // if subfile empty
+         sflrr2 = 1;                                                         // sfl record number
+         s2CharResX = 'NO ENTRIES DEFINED';                                  // no entries message
+         write stdxrefs2;                                                    // write subfile recd
+       endif;                                                                // if subfile empty
+
+       write stdxrefk2;                                                      // show function keys
+       exfmt stdxrefc2;                                                      // display subfile
+
+       end-proc;                                                             // show table entries
+
+      **********************************************************************************************
+
+       dcl-proc RevwEntries;                                                 // review entries
+
+       if Ind.Print;                                                         // if print
+
+         w3RefTbl = c2RefTbl;                                                // ref table name
+         Listing(w3RefTbl : '*LEGACY');                                      // print listing
+         exfmt stdxrefw3;                                                    // confirmation window
+
+       elseif Ind.DeleteX and OKToDelete();                                  // or delete table
+
+         exec sql delete from stdxref
+           where RefTable = :w1RefTbl;                                       // delete entire table
+
+         Ind.Cancel = *on;                                                   // back to table list
+
+       elseif Ind.Guide;                                                     // or display guide
+
+         ShowGuide();                                                        // show table guide
+
+       else;                                                                 // or enter pressed
+
+         clear sflrr2;                                                       // sfl record number
+
+         dou %eof(stdxrefmnt);                                               // until end of sfl
+
+           readc stdxrefs2;                                                  // read next entry
+
+           if s2Option > *blanks and not %eof(stdxrefmnt);                   // if entry selected
+             EditEntries();                                                  // edit selected entry
+           endif;                                                            // if entry selected
+
+         enddo;                                                              // until end of sfl
+       endif;                                                                // if print
+
+       end-proc;                                                             // review entries
+
+      **********************************************************************************************
+
+       dcl-proc EditEntries;                                                 // edit table entries
+
+       dcl-s EntryCount int(5);                                              // table entry count
+       dcl-s LowDate    date;                                                // low date value
+       dcl-s LongFormat ind;                                                 // use long format
+
+       clear stdxrefw2;                                                      // clear all fields
+       clear stdxrefw2l;                                                     // clear all fields
+       clear errors;                                                         // clear error flag
+
+       Ind.DsplayNArg = DsplayNArg;                                          // display num arg
+       Ind.DsplayCArg = DsplayCArg;                                          // display char arg
+       Ind.DsplayNRes = DsplayNRes;                                          // display num res
+       Ind.DsplayCRes = DsplayCRes;                                          // display char res
+       Ind.EntryNoDel = *off;                                                // entry del eligible
+
+       if Ind.Create;                                                        // if creating entry
+         Ind.EnableArgs = *on;                                               // enable arguments
+         Ind.EnableRslt = *on;                                               // enable results
+         w2Hidden   = 'N';                                                   // hidden from search
+         w2EntityID = 0;                                                     // no entity ID
+       else;                                                                 // updating entry
+         Ind.EnableRslt = *on;                                               // enable results
+         w2NumArg   = s2NumArg;                                              // numeric argument
+         w2CharArg  = s2CharArg;                                             // character argument
+         w2NumRes   = s2NumRes;                                              // numeric result
+         w2CharRes  = s2CharRes;                                             // character result
+         w2CharResL = s2CharRes;                                             // character result lng
+         w2Hidden   = s2Hidden;                                              // hidden from search
+         w2EntityID = s2EntityID;                                            // entity ID
+         LongFormat = %len(%trim(s2CharRes)) > %len(w2CharRes);              // long if mult lines
+       endif;                                                                // if creating entry
+
+       if c2RefTbl = SuperAdmin;                                             // if super admin table
+         Ind.EntryNoDel = (NumberOfEntries(c2RefTbl) <= 1);                  // cant delete last ent
+       endif;                                                                // if super admin table
+
+       dou Ind.Cancel or Ind.DeleteX or not errors;                          // until canc or no err
+
+         if LongFormat;                                                      // if using long format
+           exfmt stdxrefw2l;                                                 // maint window long
+         else;                                                               // using short format
+           exfmt stdxrefw2;                                                  // maint window short
+         endif;                                                              // if using long format
+
+         if Ind.DeleteX and OKToDelete();                                    // if delete
+
+           if Ind.EnableArgs;                                                // if create mode
+             Ind.Cancel = *on;                                               // same as cancel
+           else;                                                             // honestly deleting
+             exec sql delete from stdxref where EntityID = :w2EntityID;      // delete this entry
+           endif;                                                            // if create mode
+
+         elseif Ind.Cancel;                                                  // or cancel
+
+         elseif Ind.Long;                                                    // or use long format
+
+           LongFormat = *on;                                                 // force long format
+           errors     = *on;                                                 // force a redisplay
+           Ind.Long   = *off;                                                // remains in long fmt
+
+         else;                                                               // or enter pressed
+
+           clear EntryCount;                                                 // table entry count
+
+           exec sql select count(*) into :EntryCount from stdxref
+             where RefTable = :c2RefTbl
+               and NumArg   = :w2NumArg
+               and CharArg  = :w2CharArg
+               and CharArg <> :Marker;                                       // see if entry exists
+
+           Ind.EntryExist = (Ind.EnableArgs and EntryCount > 0);             // entry already exists
+           Ind.InvCharArg = (w2CharArg = Marker);                            // invalid char argmt
+
+           Ind.InvSupAdmn =
+             (c2RefTbl = SuperAdmin and UserNumber(w2CharArg) <= 0);         // invalid super admin
+
+           Ind.InvTabName =
+             (c2RefTbl = TableAdmin and w2CharArg = *blanks);                // invalid table name
+
+           Ind.InvTabAdmn =
+             (c2RefTbl = TableAdmin and
+               (w2CharArg = *blanks or UserNumber(w2CharRes) <= 0));         // invalid table admin
+
+           errors = (Ind.EntryLevel <> *zeros);                              // general errors flag
+
+           if not errors;                                                    // if no errors
+
+             if c2RefTbl = TableAdmin;                                       // if table admin entry
+               w2NumArg = UserNumber(w2CharRes);                             // set user num as arg
+             endif;                                                          // if table admin entry
+
+             if w2EntityID > 0;                                              // if updating entry
+               exec sql update stdxref
+                 set NumRes  = :w2NumRes,
+                     CharRes = case when :LongFormat = '1'
+                                    then trim(:w2CharResL)
+                                    else trim(:w2CharRes) end,
+                     Hidden  = :w2Hidden
+                   where entityID = :w2EntityID;                             // update this entry
+             else;                                                           // adding new entry
+               exec sql
+                 insert into stdxref
+                   (RefTable,
+                    NumArg,
+                    CharArg,
+                    DateArg,
+                    NumRes,
+                    CharRes,
+                    DateRes,
+                    Hidden)
+                 values
+                   (trim(:c2RefTbl),
+                    :w2NumArg,
+                    trim(:w2CharArg),
+                    :LowDate,
+                    :w2NumRes,
+                    case when :LongFormat = '1'
+                         then trim(:w2CharResL)
+                         else trim(:w2CharRes) end,
+                    :LowDate,
+                    :w2Hidden);                                              // insert new entry
+             endif;                                                          // if updating entry
+
+           endif;                                                            // if no errors
+         endif;                                                              // if delete
+       enddo;                                                                // until canc or no err
+
+       clear Ind.Cancel;                                                     // reset f12 key
+       clear Ind.EnableArgs;                                                 // reset create mode
+
+       end-proc;                                                             // edit table entries
+
+      **********************************************************************************************
+
+       dcl-proc ShowGuide;                                                   // show table guide
+
+       clear stdxrefw1;                                                      // clear all fields
+
+       Ind.EnableTabl = *off;                                                // protect all fields
+       Ind.EnableDesc = *off;                                                // protect all fields
+       Ind.SuperAdmin = *off;                                                // prevent deletes
+
+       w1RefTbl   = c2RefTbl;                                                // character argument
+       w1TblDes   = c2TblDes;                                                // character result
+       w1EntityID = getTableID(w1RefTbl);                                    // entity ID
+       w1NArgText = XrefCharNC(TableGuide : w1EntityID : 'NUMARG');          // numeric arg text
+       w1CArgText = XrefCharNC(TableGuide : w1EntityID : 'CHARARG');         // character arg text
+       w1NResText = XrefCharNC(TableGuide : w1EntityID : 'NUMRES');          // numeric res text
+       w1CResText = XrefCharNC(TableGuide : w1EntityID : 'CHARRES');         // character res text
+
+       exfmt stdxrefw1;                                                      // display window
+
+       Ind.Cancel = *off;                                                    // redisplay entries
+
+       end-proc;                                                             // show table guide
+
